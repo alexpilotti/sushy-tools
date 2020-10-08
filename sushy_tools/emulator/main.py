@@ -30,6 +30,7 @@ from sushy_tools.emulator.resources import drives as drvdriver
 from sushy_tools.emulator.resources import indicators as inddriver
 from sushy_tools.emulator.resources import managers as mgrdriver
 from sushy_tools.emulator.resources import storage as stgdriver
+from sushy_tools.emulator.resources.systems import hypervdriver
 from sushy_tools.emulator.resources.systems import libvirtdriver
 from sushy_tools.emulator.resources.systems import novadriver
 from sushy_tools.emulator.resources import vmedia as vmddriver
@@ -52,6 +53,8 @@ class Application(flask.Flask):
     @memoize.memoize()
     def systems(self):
         os_cloud = self.config.get('SUSHY_EMULATOR_OS_CLOUD')
+        hyperv = str(
+            self.config.get('SUSHY_EMULATOR_HYPERV')).lower() == "true"
 
         if os_cloud:
             if not novadriver.is_loaded:
@@ -61,6 +64,13 @@ class Application(flask.Flask):
             result = novadriver.OpenStackDriver.initialize(
                 self.config, self.logger, os_cloud)()
 
+        elif hyperv:
+            if not hypervdriver.is_loaded:
+                self.logger.error('Hyper-V driver not loaded')
+                sys.exit(1)
+
+            result = hypervdriver.HyperVDriver.initialize(
+                self.config, self.logger)()
         else:
             if not libvirtdriver.is_loaded:
                 self.logger.error('libvirt driver not loaded')
@@ -811,6 +821,11 @@ def parse_args():
                                     'environment variable '
                                     'SUSHY_EMULATOR_LIBVIRT_URI. '
                                     'Default is qemu:///system')
+    backend_group.add_argument('--hyperv',
+                               action='store_true',
+                               help='Hyper-V. Can also be set via '
+                                    'environment variable '
+                                    'SUSHY_EMULATOR_HYPERV.')
 
     return parser.parse_args()
 
@@ -827,6 +842,9 @@ def main():
 
     if args.libvirt_uri:
         app.config['SUSHY_EMULATOR_LIBVIRT_URI'] = args.libvirt_uri
+
+    if args.hyperv:
+        app.config['SUSHY_EMULATOR_HYPERV'] = args.hyperv
 
     else:
         for envvar in ('SUSHY_EMULATOR_LIBVIRT_URL',  # backward compatibility
